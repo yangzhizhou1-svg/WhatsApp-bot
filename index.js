@@ -1,52 +1,27 @@
-const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
-const express = require("express");
-const cors = require("cors");
-const pino = require("pino");
+const express = require('express');
+const cors = require('cors');
+const fetch = require('node-fetch');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-async function startBot() {
-    // Railway akan menyimpan sesi WA di folder auth_session agar tidak perlu scan ulang
-    const { state, saveCreds } = await useMultiFileAuthState('auth_session');
+// Endpoint utama untuk menerima perintah dari HTML
+app.post('/react', async (req, res) => {
+    const { link, emojis } = req.body;
     
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true, // QR akan muncul di Log Railway
-        logger: pino({ level: 'silent' })
-    });
+    // Menggunakan API dari source code yang Anda kirimkan
+    const emojiString = Array.isArray(emojis) ? emojis.join(',') : emojis;
+    const targetUrl = `https://api-faa.my.id/faa/react-channel?url=${encodeURIComponent(link)}&react=${encodeURIComponent(emojiString)}`;
 
-    sock.ev.on('creds.update', saveCreds);
+    try {
+        const response = await fetch(targetUrl);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ status: "error", message: "Gagal terhubung ke API WhatsApp-bot" });
+    }
+});
 
-    // Endpoint untuk menerima perintah react dari HTML
-    app.post("/react", async (req, res) => {
-        const { link, emojis } = req.body;
-        try {
-            // Memecah link: https://whatsapp.com/channel/ID_CHANNEL/ID_PESAN
-            const parts = link.split('/');
-            const messageId = parts.pop();
-            const channelId = parts[parts.length - 1] + "@newsletter";
-
-            for (const emoji of emojis) {
-                await sock.sendMessage(channelId, {
-                    react: { 
-                        text: emoji.trim(), 
-                        key: { remoteJid: channelId, id: messageId, fromMe: false } 
-                    }
-                });
-            }
-            res.json({ status: "success" });
-        } catch (err) {
-            res.status(500).json({ status: "error", message: err.message });
-        }
-    });
-
-    console.log("Server Bot WA Siap...");
-}
-
-startBot();
-
-// Railway menggunakan PORT dinamis, jadi harus menggunakan process.env.PORT
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Proyek WhatsApp-bot aktif pada port ${PORT}`));
